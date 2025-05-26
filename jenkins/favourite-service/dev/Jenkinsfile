@@ -1,0 +1,34 @@
+pipeline{
+    agent any 
+    tools {
+        maven "MavenTool"
+    }
+    
+    stages {
+        stage("Checkout git") {
+            steps{
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']])
+            }
+        }
+        stage("Build Favourite Service") {
+            steps {
+                dir('favourite-service') {
+                    sh 'mvn clean install' 
+                }
+            }
+        }
+        stage("Build and Push Docker Image") {
+            steps {
+                script {
+                    withDockerRegistry(
+                        credentialsId: 'dockerhub-credentials' 
+                    ) {
+                        sh 'docker build -t br14nmat/favourite-service:latest -f favourite-service/Dockerfile .'
+                        sh 'docker push br14nmat/favourite-service:latest'
+                    }
+                }
+            }
+        }
+        
+    }
+}

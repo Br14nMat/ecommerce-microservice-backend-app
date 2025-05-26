@@ -1,0 +1,62 @@
+pipeline{
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps{
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']])
+            }
+        }
+        /*
+        stage("Run Unit and Integration Tests") {
+            steps {
+                dir('favourite-service') {
+                    sh 'mvn test'
+                }
+            }
+        }*/
+
+        stage("Build Favourite Service") {
+            steps {
+                dir('favourite-service') {
+                    sh 'mvn clean install' 
+                }
+            }
+        }
+
+        stage('Login Azure') {
+            steps {
+                withCredentials([string(credentialsId: 'AZURE_SUBSCRIPTION_ID', variable: 'SUBSCRIPTION_ID')]) {
+                    sh '''
+                        az account set --subscription $SUBSCRIPTION_ID
+                    '''
+                }
+            }
+        }
+
+        stage('Get context AKS') {
+            steps {
+                sh '''
+                az aks install-cli
+                az aks get-credentials --resource-group taller2 --name taller2brian --overwrite-existing
+                kubectl config current-context
+                '''
+            }
+        }
+
+        stage('Desplegar manifiestos') {
+            steps {
+                sh '''                
+                kubectl apply -f k8s/stage/service-discovery-container-deployment.yaml
+                kubectl wait --for=condition=ready pod -l app=service-discovery --timeout=300s
+                '''
+            }
+        }
+      
+    }
+}
