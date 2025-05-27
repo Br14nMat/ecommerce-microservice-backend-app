@@ -108,5 +108,5 @@ public class ProductResourceIntegrationTest {
         assertEquals(productDto.getQuantity(), response.getQuantity());
         assertEquals(productDto.getImageUrl(), response.getImageUrl());
     }
-    
+
 }
