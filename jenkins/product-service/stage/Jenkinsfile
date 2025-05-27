@@ -10,6 +10,7 @@ pipeline {
         RESOURCE_GROUP = "taller2"
         AKS_NAME = "taller2brian"
         NAMESPACE = "stage"
+        SERVICE = 'product-service'
     }
 
     stages {
@@ -26,8 +27,17 @@ pipeline {
         
         stage("Run Unit and Integration Tests") {
             steps {
-                dir('product-service') {
+                dir('$SERVICE') {
                     sh 'mvn test'
+                }
+            }
+        }
+
+
+        stage("Build Product Service") {
+            steps {
+                dir('$SERVICE') {
+                    sh 'mvn clean install' 
                 }
             }
         }
@@ -55,8 +65,8 @@ pipeline {
         stage('Desplegar manifiestos') {
             steps {
                 sh '''
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service-container --timeout=200s
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/$SERVICE-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=$SERVICE-container --timeout=200s
                 '''
             }
         }
