@@ -1,4 +1,4 @@
-pipeline{
+pipeline {
     
     agent any
 
@@ -6,12 +6,23 @@ pipeline{
         maven "MavenTool"
     }
 
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "stage"
+    }
+
     stages {
         stage("Checkout git") {
-            steps{
-                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']])
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
             }
         }
+
         /*
         stage("Run Unit and Integration Tests") {
             steps {
@@ -19,17 +30,10 @@ pipeline{
                     sh 'mvn test'
                 }
             }
-        }*/
-
-        stage("Build Favourite Service") {
-            steps {
-                dir('favourite-service') {
-                    sh 'mvn clean install' 
-                }
-            }
         }
+        */
 
-        stage('Login Azure') {
+        stage('Set subscription') {
             steps {
                 withCredentials([string(credentialsId: 'AZURE_SUBSCRIPTION_ID', variable: 'SUBSCRIPTION_ID')]) {
                     sh '''
@@ -39,24 +43,22 @@ pipeline{
             }
         }
 
-        stage('Get context AKS') {
+        stage('Kubelogin step') {
             steps {
                 sh '''
-                az aks install-cli
-                az aks get-credentials --resource-group taller2 --name taller2brian --overwrite-existing
-                kubectl config current-context
+                    az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME --overwrite-existing
+                    kubelogin convert-kubeconfig -l azurecli
                 '''
             }
         }
 
         stage('Desplegar manifiestos') {
             steps {
-                sh '''                
-                kubectl apply -f k8s/stage/service-discovery-container-deployment.yaml
-                kubectl wait --for=condition=ready pod -l app=service-discovery --timeout=300s
+                sh '''
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/service-discovery-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery-container --timeout=300s
                 '''
             }
         }
-      
     }
 }

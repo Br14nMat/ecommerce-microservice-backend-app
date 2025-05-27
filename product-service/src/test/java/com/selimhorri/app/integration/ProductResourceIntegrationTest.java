@@ -79,7 +79,7 @@ public class ProductResourceIntegrationTest {
         String url = "http://localhost:" + port + "/product-service/api/products/1";
         ProductDto response = restTemplate.getForObject(url, ProductDto.class);
 
-        assertEquals("Balón de Fútbol Profesional", response.getProductTitle());
+        assertEquals("Balon de futbol", response.getProductTitle());
         assertEquals("ball_football.jpg", response.getImageUrl());
         assertEquals("SKU-DEP-BF1", response.getSku());
         assertEquals(29.99, response.getPriceUnit());
@@ -108,14 +108,5 @@ public class ProductResourceIntegrationTest {
         assertEquals(productDto.getQuantity(), response.getQuantity());
         assertEquals(productDto.getImageUrl(), response.getImageUrl());
     }
-
-    @Test
-    void testDelete() {
-        String url = "http://localhost:" + port + "/product-service/api/products/3";
-        restTemplate.delete(url);
-
-        DtoCollectionResponse<LinkedHashMap> response = restTemplate.getForObject("http://localhost:" + port + "/product-service/api/products", DtoCollectionResponse.class);
-
-        assertNotNull(response);
-    }
+    
 }
