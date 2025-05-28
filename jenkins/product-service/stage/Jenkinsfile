@@ -70,5 +70,38 @@ pipeline {
                 '''
             }
         }
+
+        
+        stage('Port Forward') {
+            steps {
+                script {
+                    sh '''
+                        kubectl port-forward service/${SERVICE}-container 8500:8500 -n ${NAMESPACE} &
+                        echo $! > portforward.pid
+                        sleep 5  # Espera unos segundos para que esté disponible
+                    '''
+                }
+            }
+        }
+
+        stage('Run E2E Tests') {
+            steps {
+                sh '''
+                    newman run e2e/e2e-product-service.json \
+                        --env-var baseUrl=http://localhost:8500
+                '''
+            }
+        }
+
+        stage('Cleanup Port Forward') {
+            steps {
+                sh '''
+                    kill $(cat portforward.pid) || true
+                    rm -f portforward.pid
+                '''
+            }
+        }
+
+
     }
 }
