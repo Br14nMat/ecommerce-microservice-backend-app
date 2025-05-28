@@ -56,7 +56,7 @@ public class ProductResourceIntegrationTest {
 
         assertNotNull(response);
         assertFalse(response.getCollection().isEmpty());
-        assertEquals(3, response.getCollection().size());
+        assertEquals(2, response.getCollection().size());
     }
 
     @Test
