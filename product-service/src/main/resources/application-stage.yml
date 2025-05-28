@@ -1,6 +1,6 @@
 
 server:
-  port: 8300
+  port: 8500
 
 management:
   endpoints:
@@ -28,9 +28,6 @@ spring:
       path: /h2-console
 
 logging:
-  file:
-    name: src/main/resources/script/stage_log.log
-    clean-history-on-start: true
   level:
     org:
       hibernate:
