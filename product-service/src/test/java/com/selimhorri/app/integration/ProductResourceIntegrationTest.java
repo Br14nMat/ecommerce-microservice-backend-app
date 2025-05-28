@@ -7,6 +7,9 @@ import java.util.LinkedHashMap;
 import com.selimhorri.app.dto.response.collection.DtoCollectionResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -25,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class ProductResourceIntegrationTest {
 
     @LocalServerPort
@@ -45,6 +49,18 @@ public class ProductResourceIntegrationTest {
     }
 
     @Test
+    @Order(1) 
+    void testFindAll() {
+        String url = "http://localhost:" + port + "/product-service/api/products";
+        DtoCollectionResponse<LinkedHashMap> response = restTemplate.getForObject(url, DtoCollectionResponse.class);
+
+        assertNotNull(response);
+        assertFalse(response.getCollection().isEmpty());
+        assertEquals(3, response.getCollection().size());
+    }
+
+    @Test
+    @Order(2)
     void testSave() {
         String url = "http://localhost:" + port + "/product-service/api/products";
         ProductDto productDto = new ProductDto();
@@ -61,20 +77,10 @@ public class ProductResourceIntegrationTest {
         assertNotNull(response.getProductId());
         assertEquals(productDto.getProductTitle(), response.getProductTitle());
         assertEquals(productDto.getSku(), response.getSku());
-
     }
 
     @Test
-    void testFindAll() {
-        String url = "http://localhost:" + port + "/product-service/api/products";
-        DtoCollectionResponse<LinkedHashMap> response = restTemplate.getForObject(url, DtoCollectionResponse.class);
-
-        assertNotNull(response);
-        assertFalse(response.getCollection().isEmpty());
-        assertEquals(3, response.getCollection().size());
-    }
-
-    @Test
+    @Order(3)
     void testFindById() {
         String url = "http://localhost:" + port + "/product-service/api/products/1";
         ProductDto response = restTemplate.getForObject(url, ProductDto.class);
@@ -88,6 +94,7 @@ public class ProductResourceIntegrationTest {
     }
 
     @Test
+    @Order(4)
     void testUpdate() {
         String url = "http://localhost:" + port + "/product-service/api/products";
 
@@ -108,5 +115,4 @@ public class ProductResourceIntegrationTest {
         assertEquals(productDto.getQuantity(), response.getQuantity());
         assertEquals(productDto.getImageUrl(), response.getImageUrl());
     }
-
 }

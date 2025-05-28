@@ -27,7 +27,7 @@ pipeline {
         
         stage("Run Unit and Integration Tests") {
             steps {
-                dir('$SERVICE') {
+                dir("${SERVICE}") {
                     sh 'mvn test'
                 }
             }
@@ -36,8 +36,8 @@ pipeline {
 
         stage("Build Product Service") {
             steps {
-                dir('$SERVICE') {
-                    sh 'mvn clean install' 
+                dir("${SERVICE}") {
+                    sh 'mvn clean install -DskipTests' 
                 }
             }
         }
