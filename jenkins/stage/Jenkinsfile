@@ -116,6 +116,23 @@ pipeline {
             }
         }
 
+        stage('Locust') {
+            steps {
+                sh '''
+
+                    locust -f locust/locustfile.py \
+                    --host=http://localhost:8500/product-service \
+                    --users=10 \
+                    --spawn-rate=2 \
+                    --run-time=1m \
+                    --headless \
+                    --csv=locust/locust_output/locust_results \
+                    --html=locust/locust_output/locust_report.html
+                '''
+            }
+        }
+
+
         stage('Cleanup Port Forward') {
             steps {
                 sh '''
@@ -125,24 +142,10 @@ pipeline {
             }
         }
 
-
-        stage('Locust') {
-            steps {
-                sh '''
-                    locust -f locust/locustfile.py \
-                    --host=http://localhost:8500 \
-                    --users=10 \
-                    --spawn-rate=2 \
-                    --run-time=1m \
-                    --headless \
-                    --csv=locust/locust_output/locust_results
-                '''
-            }
-        }
-
         stage('Generate Release Notes') {
                 steps {
                     script {
+
                         def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
                         def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
@@ -171,7 +174,7 @@ pipeline {
                         writeFile file: "release_notes/release-${version}.md", text: releaseNotes
                     }
                 }
-    }
+        }
    
 
     }
