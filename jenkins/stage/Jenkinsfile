@@ -10,7 +10,6 @@ pipeline {
         RESOURCE_GROUP = "taller2"
         AKS_NAME = "taller2brian"
         NAMESPACE = "stage"
-        SERVICE = 'product-service'
     }
 
     stages {
@@ -27,18 +26,31 @@ pipeline {
         
         stage("Run Unit and Integration Tests") {
             steps {
-                dir("${SERVICE}") {
+
+                dir('product-service') {
+                    sh 'mvn test'
+                }
+
+                dir('payment-service') {
                     sh 'mvn test'
                 }
             }
         }
 
-
-        stage("Build Product Service") {
+        stage("Build microservices") {
             steps {
-                dir("${SERVICE}") {
+                dir('product-service') {
                     sh 'mvn clean install -DskipTests' 
                 }
+
+                dir('payment-service') {
+                    sh 'mvn clean install -DskipTests' 
+                }
+
+                dir('order-service') {
+                    sh 'mvn clean install -DskipTests' 
+                }
+
             }
         }
         
@@ -70,7 +82,6 @@ pipeline {
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/zipkin-deployment.yaml
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=300s
 
-
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/cloud-config-container-deployment.yaml
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config-container --timeout=300s
 
@@ -85,21 +96,29 @@ pipeline {
 
         }
 
-        stage('Desplegar manifiestos') {
+        stage('Deploy remaining services') {
             steps {
                 sh '''
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/$SERVICE-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=$SERVICE-container --timeout=200s
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service-container --timeout=300s
+
                 '''
             }
         }
 
+        /*
     
-        stage('Port Forward') {
+        stage('Port Forwarding') {
             steps {
                 script {
                     sh '''
-                        kubectl port-forward service/${SERVICE}-container 8500:8500 -n ${NAMESPACE} &
+                        kubectl port-forward service/product-service-container 8500:8500 -n ${NAMESPACE} &
                         echo $! > portforward.pid
                         sleep 10  # Espera unos segundos para que esté disponible
                     '''
@@ -119,15 +138,17 @@ pipeline {
         stage('Locust') {
             steps {
                 sh '''
-
+                    
+                    mkdir -p locust/locust_output
+                    
                     locust -f locust/locustfile.py \
                     --host=http://localhost:8500/product-service \
                     --users=10 \
                     --spawn-rate=2 \
                     --run-time=1m \
                     --headless \
-                    --csv=locust/locust_output/locust_results \
                     --html=locust/locust_output/locust_report.html
+                    
                 '''
             }
         }
@@ -145,11 +166,13 @@ pipeline {
         stage('Generate Release Notes') {
                 steps {
                     script {
-
+                        
                         def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                         def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
                         def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
-
+                        
+                        sh 'mkdir -p release_notes'
+                        
                         def releaseNotes = """
                             # Release Notes - ${version}
 
@@ -164,7 +187,7 @@ pipeline {
                             - Pruebas unitarias e integradas: ✅ OK
                             - Pruebas E2E: ✅ OK (ver Newman report)
                             - Pruebas de carga Locust: ✅ OK  
-                            - Archivos: locust_output/locust_results_*.csv
+                            - Archivos: locust_output/*html
 
                             ## 📎 Referencia
                             - Build: #${env.BUILD_NUMBER}
@@ -172,10 +195,12 @@ pipeline {
                             - Branch: master
                             """
                         writeFile file: "release_notes/release-${version}.md", text: releaseNotes
+                        
                     }
                 }
         }
-   
+
+        */
 
     }
 }

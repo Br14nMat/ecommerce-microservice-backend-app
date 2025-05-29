@@ -33,7 +33,8 @@ spec:
             - name: EUREKA_CLIENT_SERVICEURL_MYZONE
               value: http://service-discovery-container:8761/eureka
             - name: SPRING_CONFIG_IMPORT
-              value: optional:configserver:http://cloud-config-container:9296/            - name: SPRING_ZIPKIN_BASE-URL
+              value: optional:configserver:http://cloud-config-container:9296/
+            - name: SPRING_ZIPKIN_BASE-URL
               value: http://zipkin:9411
           image: br14nmat/payment-service:latest
           name: payment-service-container
