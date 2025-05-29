@@ -62,24 +62,23 @@ pipeline {
             }
         }
 
-        stage('Deploy core service'){
+        stage('Deploy core services'){
 
             steps {
                 sh '''
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/zipkin-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=200s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=300s
 
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/cloud-config-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config-container --timeout=200s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config-container --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/service-discovery-container-deployment.yaml
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery-container --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/api-gateway-container-deployment.yaml
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=api-gateway-container --timeout=300s
-
 
                 '''
             }
@@ -95,7 +94,7 @@ pipeline {
             }
         }
 
-        /*
+    
         stage('Port Forward') {
             steps {
                 script {
@@ -112,8 +111,7 @@ pipeline {
         stage('Run E2E Tests') {
             steps {
                 sh '''
-                    newman run e2e/e2e-product-service.json \
-                        --env-var baseUrl=http://localhost:8500
+                    newman run e2e/e2e-product-service.json
                 '''
             }
         }
@@ -126,7 +124,55 @@ pipeline {
                 '''
             }
         }
-        */
+
+
+        stage('Locust') {
+            steps {
+                sh '''
+                    locust -f locust/locustfile.py \
+                    --host=http://localhost:8500 \
+                    --users=10 \
+                    --spawn-rate=2 \
+                    --run-time=1m \
+                    --headless \
+                    --csv=locust/locust_output/locust_results
+                '''
+            }
+        }
+
+        stage('Generate Release Notes') {
+                steps {
+                    script {
+                        def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
+                        def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
+
+                        def releaseNotes = """
+                            # Release Notes - ${version}
+
+                            **Fecha y hora:** ${date}  
+                            **Ambiente:** ${NAMESPACE}  
+                            **Servicio:** ${SERVICE}  
+
+                            ## ✅ Cambios recientes
+                            ${commitLogs}
+
+                            ## 🧪 Resultados esperados
+                            - Pruebas unitarias e integradas: ✅ OK
+                            - Pruebas E2E: ✅ OK (ver Newman report)
+                            - Pruebas de carga Locust: ✅ OK  
+                            - Archivos: locust_output/locust_results_*.csv
+
+                            ## 📎 Referencia
+                            - Build: #${env.BUILD_NUMBER}
+                            - Commit: ${version}
+                            - Branch: master
+                            """
+                        writeFile file: "release_notes/release-${version}.md", text: releaseNotes
+                    }
+                }
+    }
+   
 
     }
 }

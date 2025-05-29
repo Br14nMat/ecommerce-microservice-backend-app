@@ -12,13 +12,14 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:8500/api/products",
+					"raw": "http://localhost:8500/product-service/api/products",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "8500",
 					"path": [
+						"product-service",
 						"api",
 						"products"
 					]
@@ -41,13 +42,14 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8500/api/products",
+					"raw": "http://localhost:8500/product-service/api/products",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "8500",
 					"path": [
+						"product-service",
 						"api",
 						"products"
 					]
@@ -70,13 +72,14 @@
 					}
 				},
 				"url": {
-					"raw": "http://localhost:8500/api/products",
+					"raw": "http://localhost:8500/product-service/api/products",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
 					"port": "8500",
 					"path": [
+						"product-service",
 						"api",
 						"products"
 					]
