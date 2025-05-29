@@ -36,23 +36,6 @@ pipeline {
                 }
             }
         }
-
-        stage("Build microservices") {
-            steps {
-                dir('product-service') {
-                    sh 'mvn clean install -DskipTests' 
-                }
-
-                dir('payment-service') {
-                    sh 'mvn clean install -DskipTests' 
-                }
-
-                dir('order-service') {
-                    sh 'mvn clean install -DskipTests' 
-                }
-
-            }
-        }
         
 
         stage('Set subscription') {
@@ -108,13 +91,16 @@ pipeline {
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service-container --timeout=300s
 
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service-container --timeout=300s
+
                 '''
             }
         }
 
         /*
     
-        stage('Port Forwarding') {
+        stage('Port Forward Product Service') {
             steps {
                 script {
                     sh '''
@@ -135,26 +121,25 @@ pipeline {
             }
         }
 
-        stage('Locust') {
+        stage('Locust Product Service') {
             steps {
                 sh '''
                     
-                    mkdir -p locust/locust_output
+                    mkdir -p locust/locust_output/product
                     
-                    locust -f locust/locustfile.py \
+                    locust -f locust/locustfile-product.py \
                     --host=http://localhost:8500/product-service \
                     --users=10 \
                     --spawn-rate=2 \
                     --run-time=1m \
                     --headless \
-                    --html=locust/locust_output/locust_report.html
+                    --html=locust/locust_output/product/locust_report.html
                     
                 '''
             }
         }
 
-
-        stage('Cleanup Port Forward') {
+        stage('Cleanup Port Forward Product Service') {
             steps {
                 sh '''
                     kill $(cat portforward.pid) || true
@@ -162,6 +147,19 @@ pipeline {
                 '''
             }
         }
+
+        stage('Port Forward Order Service') {
+            steps {
+                script {
+                    sh '''
+                        kubectl port-forward service/order-service-container 8300:8300 -n ${NAMESPACE} &
+                        echo $! > portforward.pid
+                        sleep 10  # Espera unos segundos para que esté disponible
+                    '''
+                }
+            }
+        }
+
 
         stage('Generate Release Notes') {
                 steps {
