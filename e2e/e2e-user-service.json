@@ -1,0 +1,113 @@
+{
+	"info": {
+		"_postman_id": "88397354-de37-48e8-8159-95a9908690ed",
+		"name": "e2e-user",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32290076"
+	},
+	"item": [
+		{
+			"name": "get all users",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8700/user-service/api/users",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8700",
+					"path": [
+						"user-service",
+						"api",
+						"users"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get all address",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8700/user-service/api/address",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8700",
+					"path": [
+						"user-service",
+						"api",
+						"address"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get all credentials",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8700/user-service/api/credentials",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8700",
+					"path": [
+						"user-service",
+						"api",
+						"credentials"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get all tokens",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "http://localhost:8700/user-service/api/verificationTokens",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8700",
+					"path": [
+						"user-service",
+						"api",
+						"verificationTokens"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

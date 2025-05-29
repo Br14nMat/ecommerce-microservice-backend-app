@@ -98,6 +98,55 @@ pipeline {
             }
         }
 
+
+        stage('Port Forward Multiple Services') {
+            steps {
+                script {
+                    sh '''
+                        # Port forward Product Service
+                        kubectl port-forward service/product-service-container 8500:8500 -n ${NAMESPACE} &
+                        echo $! > portforward-product.pid
+
+                        # Port forward Order Service
+                        kubectl port-forward service/order-service-container 8300:8300 -n ${NAMESPACE} &
+                        echo $! > portforward-order.pid
+
+                        # Port forward User Service
+                        kubectl port-forward service/user-service-container 8700:8700 -n ${NAMESPACE} &
+                        echo $! > portforward-user.pid
+
+                        # Espera unos segundos a que todos los port forwards estén listos
+                        sleep 10
+                    '''
+                }
+            }
+        }
+
+        stage('Run E2E Tests') {
+            steps {
+                sh '''
+                    newman run e2e/e2e-product-service.json
+
+                    newman run e2e/e2e-user-service.json
+
+                    newman run e2e/e2e-order-service.json
+                '''
+            }
+        }
+
+        stage('Stop Port Forwards') {
+            steps {
+                script {
+                    sh '''
+                        kill $(cat portforward-product.pid) || true
+                        kill $(cat portforward-order.pid) || true
+                        kill $(cat portforward-user.pid) || true
+                    '''
+                }
+            }
+        }
+
+
         /*
     
         stage('Port Forward Product Service') {

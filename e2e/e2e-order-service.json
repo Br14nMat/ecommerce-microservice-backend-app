@@ -1,0 +1,91 @@
+{
+	"info": {
+		"_postman_id": "a02e46ef-2cfc-4ed4-93cb-f2c4c527c92b",
+		"name": "e2e-order",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32290076"
+	},
+	"item": [
+		{
+			"name": "get all orders",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8300/order-service/api/orders",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8300",
+					"path": [
+						"order-service",
+						"api",
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "save order",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"orderId\": 1,\r\n    \"orderDate\": \"23-05-2025__02:05:55:547092\",\r\n    \"orderDesc\": \"des\",\r\n    \"orderFee\": 23,\r\n    \"cart\": {\r\n        \"cartId\": 1,\r\n        \"userId\": 1\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8300/order-service/api/orders",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8300",
+					"path": [
+						"order-service",
+						"api",
+						"orders"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "save cart",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"cartId\": 1,\r\n    \"userId\": 1,\r\n    \"user\": {\r\n        \"userId\": 1,\r\n        \"firstName\": \"dassadsda\",\r\n        \"lastName\": \"adsdas\",\r\n        \"imageUrl\": \"{{imageUrl}}\",\r\n        \"email\": \"{{email}}\",\r\n        \"phone\": \"{{phone}}\"\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8300/order-service/api/carts",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8300",
+					"path": [
+						"order-service",
+						"api",
+						"carts"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
