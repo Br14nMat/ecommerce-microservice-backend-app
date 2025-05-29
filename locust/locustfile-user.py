@@ -18,5 +18,5 @@ class UserService(HttpUser):
 
     @task(2)
     def get_all_tokens(self):
-        self.client.get("/api/tokens")
+        self.client.get("/api/verificationTokens")
     

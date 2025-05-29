@@ -134,18 +134,6 @@ pipeline {
             }
         }
 
-        stage('Stop Port Forwards') {
-            steps {
-                script {
-                    sh '''
-                        kill $(cat portforward-product.pid) || true
-                        kill $(cat portforward-order.pid) || true
-                        kill $(cat portforward-user.pid) || true
-                    '''
-                }
-            }
-        }
-
 
         stage('Locust Tests') {
             steps {
@@ -188,6 +176,18 @@ pipeline {
             
         }
 
+
+        stage('Stop Port Forwards') {
+            steps {
+                script {
+                    sh '''
+                        kill $(cat portforward-product.pid) || true
+                        kill $(cat portforward-order.pid) || true
+                        kill $(cat portforward-user.pid) || true
+                    '''
+                }
+            }
+        }
 
         stage('Generate Release Notes') {
                 steps {
