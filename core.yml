@@ -14,7 +14,8 @@ services:
     networks: 
       - microservices_network
     environment: 
-    - SPRING_ZIPKIN_BASE-URL=http://zipkin:9411 - SPRING_CONFIG_IMPORT=optional:configserver:http://cloud-config-container:9296/ 
+    - SPRING_ZIPKIN_BASE-URL=http://zipkin:9411 
+    - SPRING_CONFIG_IMPORT=optional:configserver:http://cloud-config-container:9296/ 
   cloud-config-container:
     image: br14nmat/cloud-config:latest
     ports:

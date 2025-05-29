@@ -23,7 +23,9 @@ spec:
       containers:
         - env:
             - name: SPRING_ZIPKIN_BASE-URL
-              value: http://zipkin:9411 - SPRING_CONFIG_IMPORT=optional:configserver:http://cloud-config-container:9296/
+              value: http://zipkin:9411
+            - name: SPRING_CONFIG_IMPORT
+              value : optional:configserver:http://cloud-config-container:9296/
           image: br14nmat/service-discovery:latest
           name: service-discovery-container
           ports:
