@@ -28,36 +28,6 @@
 			"response": []
 		},
 		{
-			"name": "save order",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\r\n    \"orderId\": 1,\r\n    \"orderDate\": \"23-05-2025__02:05:55:547092\",\r\n    \"orderDesc\": \"des\",\r\n    \"orderFee\": 23,\r\n    \"cart\": {\r\n        \"cartId\": 1,\r\n        \"userId\": 1\r\n    }\r\n}",
-					"options": {
-						"raw": {
-							"language": "json"
-						}
-					}
-				},
-				"url": {
-					"raw": "http://localhost:8300/order-service/api/orders",
-					"protocol": "http",
-					"host": [
-						"localhost"
-					],
-					"port": "8300",
-					"path": [
-						"order-service",
-						"api",
-						"orders"
-					]
-				}
-			},
-			"response": []
-		},
-		{
 			"name": "save cart",
 			"request": {
 				"method": "POST",
