@@ -135,48 +135,6 @@ pipeline {
         }
 
 
-        stage('Locust Tests') {
-            steps {
-                sh '''
-                    
-                    mkdir -p locust/locust_output/product
-                    
-                    locust -f locust/locustfile-product.py \
-                    --host=http://localhost:8500/product-service \
-                    --users=10 \
-                    --spawn-rate=2 \
-                    --run-time=1m \
-                    --headless \
-                    --html=locust/locust_output/product/locust_report.html
-
-
-                    mkdir -p locust/locust_output/order
-                    
-                    locust -f locust/locustfile-order.py \
-                    --host=http://localhost:8300/order-service \
-                    --users=10 \
-                    --spawn-rate=2 \
-                    --run-time=1m \
-                    --headless \
-                    --html=locust/locust_output/order/locust_report.html
-
-
-                    mkdir -p locust/locust_output/user
-                    
-                    locust -f locust/locustfile-user.py \
-                    --host=http://localhost:8700/user-service \
-                    --users=10 \
-                    --spawn-rate=2 \
-                    --run-time=1m \
-                    --headless \
-                    --html=locust/locust_output/user/locust_report.html
-                    
-                '''
-            }
-            
-        }
-
-
         stage('Stop Port Forwards') {
             steps {
                 script {
@@ -189,87 +147,6 @@ pipeline {
             }
         }
 
-        stage('Generate Release Notes') {
-                steps {
-                    script {
-                        
-                        def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
-                        def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
-                        
-                        sh 'mkdir -p release_notes'
-                        
-                        def releaseNotes = """
-                            # Release Notes - ${version}
-
-                            **Fecha y hora:** ${date}  
-                            **Ambiente:** ${NAMESPACE}  
-                            **Servicio:** ${SERVICE}  
-
-                            ## ✅ Cambios recientes
-                            ${commitLogs}
-
-                            ## 🧪 Resultados esperados
-                            - Pruebas unitarias e integradas: ✅ OK
-                            - Pruebas E2E: ✅ OK (ver Newman report)
-                            - Pruebas de carga Locust: ✅ OK  
-                            - Archivos: locust_output/*html
-
-                            ## 📎 Referencia
-                            - Build: #${env.BUILD_NUMBER}
-                            - Commit: ${version}
-                            - Branch: master
-                            """
-                        writeFile file: "release_notes/release-${version}.md", text: releaseNotes
-                        
-                    }
-                }
-        }
-
-
-        /*
-    
-        
-        stage('Locust Product Service') {
-            steps {
-                sh '''
-                    
-                    mkdir -p locust/locust_output/product
-                    
-                    locust -f locust/locustfile-product.py \
-                    --host=http://localhost:8500/product-service \
-                    --users=10 \
-                    --spawn-rate=2 \
-                    --run-time=1m \
-                    --headless \
-                    --html=locust/locust_output/product/locust_report.html
-                    
-                '''
-            }
-        }
-
-        stage('Cleanup Port Forward Product Service') {
-            steps {
-                sh '''
-                    kill $(cat portforward.pid) || true
-                    rm -f portforward.pid
-                '''
-            }
-        }
-
-        stage('Port Forward Order Service') {
-            steps {
-                script {
-                    sh '''
-                        kubectl port-forward service/order-service-container 8300:8300 -n ${NAMESPACE} &
-                        echo $! > portforward.pid
-                        sleep 10  # Espera unos segundos para que esté disponible
-                    '''
-                }
-            }
-        }
-
-        */
 
     }
 }

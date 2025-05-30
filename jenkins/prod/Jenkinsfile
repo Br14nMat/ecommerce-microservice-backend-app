@@ -1,0 +1,229 @@
+pipeline {
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "prod"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
+            }
+        }
+
+        
+        stage("Run Unit and Integration Tests") {
+            steps {
+
+                dir('product-service') {
+                    sh 'mvn test'
+                }
+
+                dir('payment-service') {
+                    sh 'mvn test'
+                }
+            }
+        }
+        
+
+        stage('Set subscription') {
+            steps {
+                withCredentials([string(credentialsId: 'AZURE_SUBSCRIPTION_ID', variable: 'SUBSCRIPTION_ID')]) {
+                    sh '''
+                        az account set --subscription $SUBSCRIPTION_ID
+                    '''
+                }
+            }
+        }
+
+        stage('Kubelogin step') {
+            steps {
+                sh '''
+                    az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME --overwrite-existing
+                    kubelogin convert-kubeconfig -l azurecli
+                '''
+            }
+        }
+
+        stage('Deploy core services'){
+
+            steps {
+                sh '''
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/zipkin-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/cloud-config-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/service-discovery-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/api-gateway-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=api-gateway-container --timeout=300s
+
+                '''
+            }
+
+        }
+
+        stage('Deploy remaining services') {
+            steps {
+                sh '''
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service-container --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service-container --timeout=300s
+
+                '''
+            }
+        }
+
+
+        stage('Port Forward Multiple Services') {
+            steps {
+                script {
+                    sh '''
+                        # Port forward Product Service
+                        kubectl port-forward service/product-service-container 8500:8500 -n ${NAMESPACE} &
+                        echo $! > portforward-product.pid
+
+                        # Port forward Order Service
+                        kubectl port-forward service/order-service-container 8300:8300 -n ${NAMESPACE} &
+                        echo $! > portforward-order.pid
+
+                        # Port forward User Service
+                        kubectl port-forward service/user-service-container 8700:8700 -n ${NAMESPACE} &
+                        echo $! > portforward-user.pid
+
+                        # Espera unos segundos a que todos los port forwards estén listos
+                        sleep 10
+                    '''
+                }
+            }
+        }
+
+        stage('Run E2E Tests') {
+            steps {
+                sh '''
+                    newman run e2e/e2e-product-service.json
+
+                    newman run e2e/e2e-user-service.json
+
+                    newman run e2e/e2e-order-service.json
+                '''
+            }
+        }
+
+
+        stage('Locust Tests') {
+            steps {
+                sh '''
+                    
+                    mkdir -p locust/locust_output/product
+                    
+                    locust -f locust/locustfile-product.py \
+                    --host=http://localhost:8500/product-service \
+                    --users=10 \
+                    --spawn-rate=2 \
+                    --run-time=1m \
+                    --headless \
+                    --html=locust/locust_output/product/locust_report.html
+
+
+                    mkdir -p locust/locust_output/order
+                    
+                    locust -f locust/locustfile-order.py \
+                    --host=http://localhost:8300/order-service \
+                    --users=10 \
+                    --spawn-rate=2 \
+                    --run-time=1m \
+                    --headless \
+                    --html=locust/locust_output/order/locust_report.html
+
+
+                    mkdir -p locust/locust_output/user
+                    
+                    locust -f locust/locustfile-user.py \
+                    --host=http://localhost:8700/user-service \
+                    --users=10 \
+                    --spawn-rate=2 \
+                    --run-time=1m \
+                    --headless \
+                    --html=locust/locust_output/user/locust_report.html
+                    
+                '''
+            }
+            
+        }
+
+
+        stage('Stop Port Forwards') {
+            steps {
+                script {
+                    sh '''
+                        kill $(cat portforward-product.pid) || true
+                        kill $(cat portforward-order.pid) || true
+                        kill $(cat portforward-user.pid) || true
+                    '''
+                }
+            }
+        }
+
+        stage('Generate Release Notes') {
+                steps {
+                    script {
+                        
+                        def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
+                        def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
+                        
+                        sh 'mkdir -p release_notes'
+                        
+                        def releaseNotes = """
+                            # Release Notes - ${version}
+
+                            **Fecha y hora:** ${date}  
+                            **Ambiente:** ${NAMESPACE}  
+
+                            ## ✅ Cambios recientes
+                            ${commitLogs}
+
+                            ## 🧪 Resultados esperados
+                            - Pruebas unitarias e integradas: ✅ OK
+                            - Pruebas E2E: ✅ OK 
+                            - Pruebas de carga Locust: ✅ OK (ver Newman report) 
+                                - Archivos: locust_output/*/locust_report.html
+
+                            ## 📎 Referencia
+                            - Build: #${env.BUILD_NUMBER}
+                            - Commit: ${version}
+                            - Branch: master
+                            """
+                        writeFile file: "release_notes/release-${version}.md", text: releaseNotes
+                        
+                    }
+                }
+        }
+
+    }
+}
