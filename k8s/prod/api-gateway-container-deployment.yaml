@@ -24,18 +24,20 @@ spec:
         - env:
             - name: SPRING_PROFILES_ACTIVE
               value: prod
-            - name: EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT
-              value: myzone
+            - name: SPRING_ZIPKIN_BASE_URL
+              value: http://zipkin:9411
+            - name: SPRING_CONFIG_IMPORT
+              value: optional:configserver:http://cloud-config:9296/
             - name: EUREKA_CLIENT_REGION
               value: default
-            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
-              value: http://service-discovery-container:8761/eureka/
+            - name: EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT
+              value: myzone
             - name: EUREKA_CLIENT_SERVICEURL_MYZONE
-              value: http://service-discovery-container:8761/eureka
-            - name: SPRING_CONFIG_IMPORT
-              value: optional:configserver:http://cloud-config-container:9296/
-            - name: SPRING_ZIPKIN_BASE-URL
-              value: http://zipkin:9411
+              value: http://service-discovery:8761/eureka
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://service-discovery:8761/eureka/
+            - name: EUREKA_INSTANCE
+              value: "api-gateway"
           image: br14nmat/api-gateway:latest
           name: api-gateway-container
           ports:

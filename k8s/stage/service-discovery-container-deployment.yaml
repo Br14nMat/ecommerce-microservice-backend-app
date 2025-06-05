@@ -22,10 +22,18 @@ spec:
     spec:
       containers:
         - env:
-            - name: SPRING_ZIPKIN_BASE-URL
-              value: http://zipkin:9411              
+            - name: SPRING_PROFILES_ACTIVE
+              value: stage
+            - name: SPRING_ZIPKIN_BASE_URL
+              value: http://zipkin:9411
             - name: SPRING_CONFIG_IMPORT
-              value : optional:configserver:http://cloud-config-container:9296/
+              value: optional:configserver:http://cloud-config:9296/
+            - name: EUREKA_INSTANCE
+              value: "service-discovery"
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: service-discovery
+            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
+              value: "false"
           image: br14nmat/service-discovery:latest
           name: service-discovery-container
           ports:

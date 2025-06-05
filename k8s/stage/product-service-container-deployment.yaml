@@ -36,6 +36,12 @@ spec:
               value: optional:configserver:http://cloud-config-container:9296/
             - name: SPRING_ZIPKIN_BASE-URL
               value: http://zipkin:9411
+            - name: EUREKA_INSTANCE
+              value: "product-service"
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: product-service 
+            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
+              value: "false"
           image: br14nmat/product-service:latest
           name: product-service-container
           ports:
