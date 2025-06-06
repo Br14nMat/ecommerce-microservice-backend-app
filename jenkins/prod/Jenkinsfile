@@ -66,13 +66,13 @@ pipeline {
                     kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/cloud-config-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/service-discovery-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/api-gateway-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=api-gateway-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=api-gateway --timeout=300s
 
                 '''
             }
@@ -83,16 +83,16 @@ pipeline {
             steps {
                 sh '''
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service --timeout=300s
 
                     kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service-container --timeout=300s
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service --timeout=300s
 
                 '''
             }
@@ -104,15 +104,15 @@ pipeline {
                 script {
                     sh '''
                         # Port forward Product Service
-                        kubectl port-forward service/product-service-container 8500:8500 -n ${NAMESPACE} &
+                        kubectl port-forward service/product-service 8500:8500 -n ${NAMESPACE} &
                         echo $! > portforward-product.pid
 
                         # Port forward Order Service
-                        kubectl port-forward service/order-service-container 8300:8300 -n ${NAMESPACE} &
+                        kubectl port-forward service/order-service 8300:8300 -n ${NAMESPACE} &
                         echo $! > portforward-order.pid
 
                         # Port forward User Service
-                        kubectl port-forward service/user-service-container 8700:8700 -n ${NAMESPACE} &
+                        kubectl port-forward service/user-service 8700:8700 -n ${NAMESPACE} &
                         echo $! > portforward-user.pid
 
                         # Espera unos segundos a que todos los port forwards estén listos

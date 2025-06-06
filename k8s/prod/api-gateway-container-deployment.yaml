@@ -5,20 +5,20 @@ metadata:
     kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert
     kompose.version: 1.36.0 (ae2a39403)
   labels:
-    io.kompose.service: api-gateway-container
-  name: api-gateway-container
+    io.kompose.service: api-gateway
+  name: api-gateway
 spec:
   replicas: 1
   selector:
     matchLabels:
-      io.kompose.service: api-gateway-container
+      io.kompose.service: api-gateway
   template:
     metadata:
       annotations:
         kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert
         kompose.version: 1.36.0 (ae2a39403)
       labels:
-        io.kompose.service: api-gateway-container
+        io.kompose.service: api-gateway
     spec:
       containers:
         - env:
@@ -33,13 +33,13 @@ spec:
             - name: EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT
               value: myzone
             - name: EUREKA_CLIENT_SERVICEURL_MYZONE
-              value: http://service-discovery-container:8761/eureka
+              value: http://service-discovery:8761/eureka
             - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
-              value: http://service-discovery-container:8761/eureka/
+              value: http://service-discovery:8761/eureka/
             - name: EUREKA_INSTANCE
               value: "api-gateway"
           image: br14nmat/api-gateway:latest
-          name: api-gateway-container
+          name: api-gateway
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -54,13 +54,13 @@ metadata:
     kompose.cmd: C:\ProgramData\chocolatey\lib\kubernetes-kompose\tools\kompose.exe convert
     kompose.version: 1.36.0 (ae2a39403)
   labels:
-    io.kompose.service: api-gateway-container
-  name: api-gateway-container
+    io.kompose.service: api-gateway
+  name: api-gateway
 spec:
   ports:
     - name: "8080"
       port: 8080
       targetPort: 8080
   selector:
-    io.kompose.service: api-gateway-container
+    io.kompose.service: api-gateway
   type: LoadBalancer
