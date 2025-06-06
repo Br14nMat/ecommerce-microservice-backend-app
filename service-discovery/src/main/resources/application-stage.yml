@@ -9,13 +9,6 @@ management:
         include: "*"
 
 
-eureka:
-  client:
-    register-with-eureka: false
-    fetch-registry: false
-  service-url:
-      defaultZone: http://service-discovery:8761/eureka/
-
 logging:
   file:
     name: src/main/resources/script/stage_log.log
