@@ -60,4 +60,5 @@ spec:
       targetPort: 8761
   selector:
     io.kompose.service: service-discovery-container
+  type: LoadBalancer
     
