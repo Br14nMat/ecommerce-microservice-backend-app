@@ -67,3 +67,4 @@ spec:
       targetPort: 8080
   selector:
     io.kompose.service: api-gateway-container
+  type: LoadBalancer
