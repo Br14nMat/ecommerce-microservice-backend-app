@@ -57,22 +57,6 @@ pipeline {
             }
         }
 
-        stage('Tag Release in Git') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                    script {
-                        sh '''
-                            git config user.email "ci-bot@example.com"
-                            git config user.name "CI Bot"
-                            git tag -a v$NEXT_VERSION -m "Release v$NEXT_VERSION"
-                            git push https://$GIT_USER:$GIT_TOKEN@github.com/Br14nMat/ecommerce-microservice-backend-app.git v$NEXT_VERSION
-                        '''
-                    }
-                }
-            }
-        }
-
-
         stage('Generate Release Notes') {
             steps {
                 script {
@@ -105,7 +89,29 @@ pipeline {
                     writeFile file: "release_notes/release-v${env.NEXT_VERSION}.md", text: releaseNotes
                 }
             }
-        }  
+        } 
 
-}
+        stage('Tag Release in Git') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    script {
+                        sh '''
+                            git config user.email "ci-bot@example.com"
+                            git config user.name "CI Bot"
+                            git tag -a v$NEXT_VERSION -m "Release v$NEXT_VERSION"
+                            git push https://$GIT_USER:$GIT_TOKEN@github.com/Br14nMat/ecommerce-microservice-backend-app.git v$NEXT_VERSION
+
+                            echo $GIT_TOKEN | gh auth login --with-token
+
+                            gh release create v$NEXT_VERSION --repo Br14nMat/ecommerce-microservice-backend-app --title "Release v$NEXT_VERSION" --notes-file release_notes/release-v$NEXT_VERSION.md
+
+
+                        '''
+                    }
+                }
+            }
+        }
+ 
+
+    }
 }
