@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        REGISTRY = "br14nmat"
+        TAG = "latest"
+        SERVICES = "api-gateway favourite-service order-service payment-service product-service proxy-client shipping-service user-service"
+        TRIVY_CACHE = "${HOME}/.trivy-cache-backup"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']])
+            }
+        }
+
+        stage('Scan with Trivy') {
+            steps {
+                script {
+                    for (service in env.SERVICES.tokenize()) {
+                        def image = "${env.REGISTRY}/${service}:${env.TAG}"
+                        def safeName = service.replaceAll("[^a-zA-Z0-9_-]", "_") // Para nombres de archivos válidos
+                        echo "Escaneando imagen ${image} con Trivy (generando reportes)"
+                        sh """
+                            mkdir -p trivy-reports
+                            
+                            # Guardar salida en texto
+                            trivy image \
+                                --cache-dir ${env.TRIVY_CACHE} \
+                                --timeout 10m \
+                                --skip-db-update \
+                                --skip-java-db-update \
+                                --exit-code 0 \
+                                --severity CRITICAL \
+                                ${image} > trivy-reports/${safeName}_report.txt
+
+                
+                        """
+                    }
+                }
+            }
+        }
+    }
+}

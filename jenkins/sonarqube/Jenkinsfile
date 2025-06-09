@@ -1,0 +1,38 @@
+pipeline {
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "stage"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            environment {
+                SONAR_TOKEN = credentials('SONARQUBE_TOKEN')
+            }
+            steps {
+                withSonarQubeEnv('SonarServer') {
+                    sh 'mvn clean package sonar:sonar'
+                }
+            }
+        }
+        
+    }
+}
