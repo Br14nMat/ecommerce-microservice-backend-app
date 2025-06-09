@@ -1,0 +1,138 @@
+pipeline {
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "prod"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
+            }
+        }
+
+        
+        stage("Run Unit and Integration Tests") {
+            steps {
+
+                dir('product-service') {
+                    sh 'mvn clean verify'
+                }
+
+                dir('payment-service') {
+                    sh 'mvn clean verify'
+                }
+            }
+        }
+
+
+        stage('Generate Release Notes') {
+                steps {
+                    script {
+                        
+                        def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                        def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
+                        def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
+                        
+                        sh 'mkdir -p release_notes'
+                        
+                        def releaseNotes = """
+                            # Release Notes - ${version}
+
+                            **Fecha y hora:** ${date}  
+                            **Ambiente:** ${NAMESPACE}  
+
+                            ## ✅ Cambios recientes
+                            
+                            ${commitLogs}
+
+                            ## 🧪 Resultados esperados
+                            - Pruebas unitarias e integradas: ✅ OK
+                            - Pruebas E2E: ✅ OK 
+                            - Pruebas de carga Locust: ✅ OK (ver Newman report) 
+                                - Archivos: locust_output/*/locust_report.html
+
+                            ## 📎 Referencia
+                            - Build: #${env.BUILD_NUMBER}
+                            - Commit: ${version}
+                            - Branch: master
+                            """
+                        writeFile file: "release_notes/release-${version}.md", text: releaseNotes
+                        
+                    }
+                }
+        }
+
+        stage('Archive JaCoCo Reports') {
+            steps {
+                script {
+                    sh 'mkdir -p coverage-reports/product-service'
+                    sh 'mkdir -p coverage-reports/payment-service'
+
+                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
+                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                }
+
+                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+            }
+        }
+
+    }
+
+    post {
+    success {
+        script {
+            def successAttachment = [[
+                text: "✅ El pipeline de ${env.NAMESPACE} se ejecutó correctamente.", 
+                fallback: 'El pipeline fue exitoso.',
+                color: '#36a64f'
+            ]]
+            def slackResponse = slackSend(channel: "#general-ingesoftv", attachments: successAttachment)
+
+            def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+            slackUploadFile(
+                filePath: "release_notes/release-${version}.md",
+                channel: slackResponse.channelId,
+                initialComment: "📝 Notas de la versión ${version}"
+            )
+
+            slackUploadFile(
+                filePath: "coverage-reports/product-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Product Service"
+            )
+
+            slackUploadFile(
+                filePath: "coverage-reports/payment-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Payment Service"
+            )
+        }
+    }
+
+    failure {
+        script {
+            def failureAttachment = [[
+                text: "❌ El pipeline de ${env.NAMESPACE} falló. Revisa los logs para más detalles.", 
+                fallback: 'El pipeline falló.',
+                color: '#ff0000'
+            ]]
+            slackSend(channel: "#general-ingesoftv", attachments: failureAttachment)
+        }
+    }
+}
+
+
+}

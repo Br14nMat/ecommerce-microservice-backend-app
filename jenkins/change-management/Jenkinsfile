@@ -1,0 +1,111 @@
+pipeline {
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "prod"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
+            }
+        }
+
+        stage('Determine Next Semantic Version') {
+            steps {
+                script {
+                    // Extraer última versión tag
+                    def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
+
+                    // Obtener los commits desde el último tag
+                    def commits = sh(script: "git log ${lastTag}..HEAD --pretty=%s", returnStdout: true).trim().split("\n")
+
+                    def major = 0, minor = 0, patch = 0
+                    (major, minor, patch) = lastTag.tokenize('.').collect { it.toInteger() }
+
+                    def bump = "patch"
+                    for (msg in commits) {
+                        if (msg.startsWith("feat:")) {
+                            bump = bump == "major" ? "major" : "minor"
+                        }
+                        if (msg.startsWith("BREAKING CHANGE") || msg.contains("!:")) {
+                            bump = "major"
+                        }
+                    }
+
+                    if (bump == "major") major++
+                    else if (bump == "minor") { minor++; patch = 0 }
+                    else if (bump == "patch") patch++
+
+                    def nextVersion = "${major}.${minor}.${patch}"
+
+                    echo "Next version will be: ${nextVersion}"
+                    env.NEXT_VERSION = nextVersion
+                }
+            }
+        }
+
+        stage('Tag Release in Git') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    script {
+                        sh '''
+                            git config user.email "ci-bot@example.com"
+                            git config user.name "CI Bot"
+                            git tag -a v$NEXT_VERSION -m "Release v$NEXT_VERSION"
+                            git push https://$GIT_USER:$GIT_TOKEN@github.com/Br14nMat/ecommerce-microservice-backend-app.git v$NEXT_VERSION
+                        '''
+                    }
+                }
+            }
+        }
+
+
+        stage('Generate Release Notes') {
+            steps {
+                script {
+                    def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
+                    def commitLogs = sh(script: "git log v${env.NEXT_VERSION}^..v${env.NEXT_VERSION} --pretty=format:'- %s (%an)'", returnStdout: true).trim()
+
+                    sh 'mkdir -p release_notes'
+
+                    def releaseNotes = """
+                        # Release Notes - v${env.NEXT_VERSION}
+
+                        **Fecha y hora:** ${date}  
+                        **Ambiente:** ${NAMESPACE}  
+
+                        ## ✅ Cambios recientes
+                        ${commitLogs}
+
+                        ## 🧪 Resultados esperados
+                        - Pruebas unitarias e integradas: ✅ OK
+                        - Pruebas E2E: ✅ OK 
+                        - Pruebas de carga Locust: ✅ OK (ver reportes HTML) 
+                            - Archivos: locust_output/*/locust_report.html
+
+                        ## 📎 Referencia
+                        - Build: #${env.BUILD_NUMBER}
+                        - Commit: ${env.GIT_COMMIT}
+                        - Versión: v${env.NEXT_VERSION}
+                        - Branch: master
+                    """
+                    writeFile file: "release_notes/release-v${env.NEXT_VERSION}.md", text: releaseNotes
+                }
+            }
+        }  
+
+}
+}

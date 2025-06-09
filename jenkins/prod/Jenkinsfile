@@ -28,11 +28,11 @@ pipeline {
             steps {
 
                 dir('product-service') {
-                    sh 'mvn test'
+                    sh 'mvn clean verify'
                 }
 
                 dir('payment-service') {
-                    sh 'mvn test'
+                    sh 'mvn clean verify'
                 }
             }
         }
@@ -225,5 +225,43 @@ pipeline {
                 }
         }
 
+        stage('Archive JaCoCo Reports') {
+            steps {
+                script {
+                    sh 'mkdir -p coverage-reports/product-service'
+                    sh 'mkdir -p coverage-reports/payment-service'
+
+                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
+                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                }
+
+                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+            }
+        }
+
     }
+
+    post {
+        success {
+            script {
+                def successAttachment = [[
+                    text: "✅ El pipeline de ${env.NAMESPACE} se ejecutó correctamente.", 
+                    fallback: 'El pipeline fue exitoso.',
+                    color: '#36a64f'
+                ]]
+                slackSend(channel: "#general-ingesoftv", attachments: successAttachment) 
+            }
+        }
+        failure {
+            script {
+                def failureAttachment = [[
+                    text: "❌ El pipeline de ${env.NAMESPACE} falló. Revisa los logs para más detalles.", 
+                    fallback: 'El pipeline falló.',
+                    color: '#ff0000'
+                ]]
+                slackSend(channel: "#general-ingesoftv", attachments: failureAttachment)
+            }
+        }
+    }
+
 }
