@@ -23,73 +23,99 @@ pipeline {
             }
         }
 
-        stage('Determine Next Semantic Version') {
-            steps {
-                script {
-                    // Extraer última versión tag
-                    def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
+            stage('Determine Next Semantic Version') {
+    steps {
+        script {
+            // Extraer última versión tag
+            def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
 
-                    // Obtener los commits desde el último tag
-                    def commits = sh(script: "git log ${lastTag}..HEAD --pretty=%s", returnStdout: true).trim().split("\n")
+            // Remover prefijo 'v' si existe
+            lastTag = lastTag.replaceFirst("^v", "")
 
-                    def major = 0, minor = 0, patch = 0
-                    (major, minor, patch) = lastTag.tokenize('.').collect { it.toInteger() }
+            def major = 0, minor = 0, patch = 0
+            def parts = lastTag.tokenize('.')
 
-                    def bump = "patch"
-                    for (msg in commits) {
-                        if (msg.startsWith("feat:")) {
-                            bump = bump == "major" ? "major" : "minor"
-                        }
-                        if (msg.startsWith("BREAKING CHANGE") || msg.contains("!:")) {
-                            bump = "major"
-                        }
-                    }
+            if (parts.size() == 3 && parts.every { it.isInteger() }) {
+                (major, minor, patch) = parts.collect { it.toInteger() }
+            } else {
+                echo "WARNING: El último tag '${lastTag}' no tiene formato semántico. Se usará 0.0.0 por defecto."
+            }
 
-                    if (bump == "major") major++
-                    else if (bump == "minor") { minor++; patch = 0 }
-                    else if (bump == "patch") patch++
+            // Obtener los commits desde el último tag (usar v${lastTag} si los tags están con prefijo)
+            def commitRange = "v${major}.${minor}.${patch}"
+            def commits = sh(script: "git log ${commitRange}..HEAD --pretty=%s || true", returnStdout: true).trim().split("\n")
 
-                    def nextVersion = "${major}.${minor}.${patch}"
-
-                    echo "Next version will be: ${nextVersion}"
-                    env.NEXT_VERSION = nextVersion
+            def bump = "patch"
+            for (msg in commits) {
+                if (msg.startsWith("feat:")) {
+                    bump = bump == "major" ? "major" : "minor"
+                }
+                if (msg.startsWith("BREAKING CHANGE") || msg.contains("!:")) {
+                    bump = "major"
                 }
             }
+
+            if (bump == "major") {
+                major++
+                minor = 0
+                patch = 0
+            } else if (bump == "minor") {
+                minor++
+                patch = 0
+            } else if (bump == "patch") {
+                patch++
+            }
+
+            def nextVersion = "${major}.${minor}.${patch}"
+
+            echo "Next version will be: ${nextVersion}"
+            env.NEXT_VERSION = nextVersion
         }
+    }
+}
+
 
         stage('Generate Release Notes') {
-            steps {
-                script {
-                    def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
-                    def commitLogs = sh(script: "git log v${env.NEXT_VERSION}^..v${env.NEXT_VERSION} --pretty=format:'- %s (%an)'", returnStdout: true).trim()
+    steps {
+        script {
+            def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
 
-                    sh 'mkdir -p release_notes'
+            // Usar el último tag existente como base
+            def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
+            lastTag = lastTag.replaceFirst("^v", "") // por si tiene 'v'
 
-                    def releaseNotes = """
-                        # Release Notes - v${env.NEXT_VERSION}
+            def commitLogs = sh(
+                script: "git log v${lastTag}..HEAD --pretty=format:'- %s (%an)' || true",
+                returnStdout: true
+            ).trim()
 
-                        **Fecha y hora:** ${date}  
-                        **Ambiente:** ${NAMESPACE}  
+            sh 'mkdir -p release_notes'
 
-                        ## ✅ Cambios recientes
-                        ${commitLogs}
+            def releaseNotes = """
+                # Release Notes - v${env.NEXT_VERSION}
 
-                        ## 🧪 Resultados esperados
-                        - Pruebas unitarias e integradas: ✅ OK
-                        - Pruebas E2E: ✅ OK 
-                        - Pruebas de carga Locust: ✅ OK (ver reportes HTML) 
-                            - Archivos: locust_output/*/locust_report.html
+                **Fecha y hora:** ${date}  
+                **Ambiente:** ${NAMESPACE}  
 
-                        ## 📎 Referencia
-                        - Build: #${env.BUILD_NUMBER}
-                        - Commit: ${env.GIT_COMMIT}
-                        - Versión: v${env.NEXT_VERSION}
-                        - Branch: master
-                    """
-                    writeFile file: "release_notes/release-v${env.NEXT_VERSION}.md", text: releaseNotes
-                }
-            }
-        } 
+                ## ✅ Cambios recientes
+                ${commitLogs}
+
+                ## 🧪 Resultados esperados
+                - Pruebas unitarias e integradas: ✅ OK
+                - Pruebas E2E: ✅ OK 
+                - Pruebas de carga Locust: ✅ OK (ver reportes HTML) 
+                    - Archivos: locust_output/*/locust_report.html
+
+                ## 📎 Referencia
+                - Build: #${env.BUILD_NUMBER}
+                - Commit: ${env.GIT_COMMIT}
+                - Versión: v${env.NEXT_VERSION}
+                - Branch: master
+            """
+            writeFile file: "release_notes/release-v${env.NEXT_VERSION}.md", text: releaseNotes
+        }
+    }
+}
 
         stage('Tag Release in Git') {
             steps {
@@ -111,6 +137,7 @@ pipeline {
                 }
             }
         }
+
  
 
     }
