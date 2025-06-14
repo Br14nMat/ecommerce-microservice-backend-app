@@ -4,6 +4,9 @@ import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 
+import io.github.resilience4j.bulkhead.annotation.Bulkhead;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +24,8 @@ import com.selimhorri.app.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/orders")
 @Slf4j
@@ -30,12 +35,14 @@ public class OrderResource {
 	private final OrderService orderService;
 	
 	@GetMapping
+	@CircuitBreaker(name = "orderService", fallbackMethod = "fallbackFindAll")
 	public ResponseEntity<DtoCollectionResponse<OrderDto>> findAll() {
 		log.info("*** OrderDto List, controller; fetch all orders *");
 		return ResponseEntity.ok(new DtoCollectionResponse<>(this.orderService.findAll()));
 	}
 	
 	@GetMapping("/{orderId}")
+	@Retry(name = "orderServiceRetry", fallbackMethod = "fallbackOrder")
 	public ResponseEntity<OrderDto> findById(
 			@PathVariable("orderId") 
 			@NotBlank(message = "Input must not be blank") 
@@ -45,6 +52,7 @@ public class OrderResource {
 	}
 	
 	@PostMapping
+	@Bulkhead(name = "orderBulkhead", type = Bulkhead.Type.THREADPOOL)
 	public ResponseEntity<OrderDto> save(
 			@RequestBody 
 			@NotNull(message = "Input must not be NULL") 
@@ -80,9 +88,20 @@ public class OrderResource {
 		this.orderService.deleteById(Integer.parseInt(orderId));
 		return ResponseEntity.ok(true);
 	}
-	
-	
-	
+
+	public ResponseEntity<OrderDto> fallbackOrder(String orderId, Exception ex) {
+		log.warn("Fallback for findById due to: {}", ex.toString());
+		return ResponseEntity.ok(new OrderDto());
+	}
+
+	public ResponseEntity<DtoCollectionResponse<OrderDto>> fallbackFindAll(Throwable ex) {
+		log.warn("Fallback method invoked due to: {}", ex.toString());
+
+		return ResponseEntity.ok(new DtoCollectionResponse<>(List.of()));
+
+	}
+
+
 }
 
 

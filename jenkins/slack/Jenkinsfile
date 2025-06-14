@@ -13,6 +13,25 @@ pipeline {
     }
 
     stages {
+        stage('Solicitar Aprobación para Producción') {
+            steps {
+                script {
+                    def approvalAttachment = [[
+                        text: "🚨 Se requiere aprobación para desplegar a *producción*.\n\nPresiona 'Aprobar' en Jenkins para continuar.",
+                        fallback: "Aprobación requerida para despliegue.",
+                        color: "#ffae42"
+                    ]]
+
+                    slackSend(channel: "#general-ingesoftv", attachments: approvalAttachment)
+
+                    timeout(time: 15, unit: 'MINUTES') {
+                        input message: "¿Aprobar despliegue a producción?", ok: "Aprobar"
+                    }
+                }
+            }
+        }
+
+
         stage("Checkout git") {
             steps {
                 checkout scmGit(

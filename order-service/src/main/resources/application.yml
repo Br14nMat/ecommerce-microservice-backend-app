@@ -1,4 +1,3 @@
-
 server:
   servlet:
     context-path: /order-service
@@ -27,20 +26,31 @@ resilience4j:
         sliding-window-size: 10
         wait-duration-in-open-state: 5s
         sliding-window-type: COUNT_BASED
+  retry:
+    instances:
+      orderServiceRetry:
+        max-attempts: 3
+        wait-duration: 1s
+  bulkhead:
+    instances:
+      orderBulkhead:
+        max-concurrent-calls: 5
+        max-wait-duration: 500ms
+
+
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+    metrics:
+      tags:
+        application: ${spring.application.name}
+
   health:
     circuitbreakers:
       enabled: true
   endpoint:
     health:
       show-details: always
-
-
-
-
-
-
-
-
-
