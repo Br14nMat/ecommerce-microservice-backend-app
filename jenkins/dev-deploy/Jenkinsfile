@@ -1,0 +1,197 @@
+pipeline {
+    
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        RESOURCE_GROUP = "taller2"
+        AKS_NAME = "taller2brian"
+        NAMESPACE = "dev"
+        SONAR_TOKEN = credentials('SONARQUBE_TOKEN')
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']], 
+                    extensions: [], 
+                    userRemoteConfigs: [[url: 'https://github.com/Br14nMat/ecommerce-microservice-backend-app']]
+                )
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarServer') {
+                    sh 'mvn clean package sonar:sonar'
+                }
+            }
+        }
+
+        stage("Resumen SonarQube en Slack") {
+        steps {
+            script {
+                def projectKey = "ecommerce-microservice-backend-app"
+                def sonarHost = "http://localhost:9000"         
+                def metrics = "coverage,bugs,vulnerabilities,code_smells,sqale_rating,reliability_rating,security_rating"
+                
+                def response = sh(
+                    script: """curl -s -u $SONAR_TOKEN: "$sonarHost/api/measures/component?component=$projectKey&metricKeys=$metrics" """,
+                    returnStdout: true
+                ).trim()
+
+                def data = readJSON text: response
+                def measures = data.component.measures.collectEntries { [(it.metric): it.value] }
+
+                def attachment = [[
+                    title: "📊 SonarQube Report - ${projectKey}",
+                    color: "#4CAF50",
+                    fields: [
+                        [title: "Coverage", value: "${measures.coverage}%", short: true],
+                        [title: "Bugs", value: "${measures.bugs}", short: true],
+                        [title: "Vulnerabilities", value: "${measures.vulnerabilities}", short: true],
+                        [title: "Code Smells", value: "${measures.code_smells}", short: true],
+                        [title: "Maintainability", value: "Rating ${measures.sqale_rating}", short: true],
+                        [title: "Reliability", value: "Rating ${measures.reliability_rating}", short: true],
+                        [title: "Security", value: "Rating ${measures.security_rating}", short: true]
+                    ]
+                ]]
+
+                slackSend(channel: "#general-ingesoftv", attachments: attachment)
+            }
+        }
+        }
+
+
+        stage("Run Unit and Integration Tests") {
+            steps {
+
+                dir('product-service') {
+                    sh 'mvn clean verify'
+                }
+
+                dir('payment-service') {
+                    sh 'mvn clean verify'
+                }
+            }
+        }
+
+        stage('Archive JaCoCo Reports') {
+            steps {
+                script {
+                    sh 'mkdir -p coverage-reports/product-service'
+                    sh 'mkdir -p coverage-reports/payment-service'
+
+                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
+                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                }
+
+                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+            }
+        }
+
+        stage('Set subscription') {
+            steps {
+                withCredentials([string(credentialsId: 'AZURE_SUBSCRIPTION_ID', variable: 'SUBSCRIPTION_ID')]) {
+                    sh '''
+                        az account set --subscription $SUBSCRIPTION_ID
+                    '''
+                }
+            }
+        }
+
+        stage('Kubelogin step') {
+            steps {
+                sh '''
+                    az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME --overwrite-existing
+                    kubelogin convert-kubeconfig -l azurecli
+                '''
+            }
+        }
+
+        stage('Deploy core services'){
+
+            steps {
+                sh '''
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/zipkin-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=zipkin --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/cloud-config-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=cloud-config --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/service-discovery-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=service-discovery --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/api-gateway-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=api-gateway --timeout=300s
+
+                '''
+            }
+
+        }
+
+        stage('Deploy remaining services') {
+            steps {
+                sh '''
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service --timeout=300s
+
+                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
+                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service --timeout=300s
+
+                '''
+            }
+        }
+        
+    }
+
+
+    post {
+    success {
+        script {
+            def successAttachment = [[
+                text: "✅ El pipeline de ${env.NAMESPACE} se ejecutó correctamente.", 
+                fallback: 'El pipeline fue exitoso.',
+                color: '#36a64f'
+            ]]
+            def slackResponse = slackSend(channel: "#general-ingesoftv", attachments: successAttachment)
+
+            def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+            
+            slackUploadFile(
+                filePath: "coverage-reports/product-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Product Service"
+            )
+
+            slackUploadFile(
+                filePath: "coverage-reports/payment-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Payment Service"
+            )
+        }
+    }
+
+    failure {
+        script {
+            def failureAttachment = [[
+                text: "❌ El pipeline de ${env.NAMESPACE} falló. Revisa los logs para más detalles.", 
+                fallback: 'El pipeline falló.',
+                color: '#ff0000'
+            ]]
+            slackSend(channel: "#general-ingesoftv", attachments: failureAttachment)
+        }
+    }
+    }
+}

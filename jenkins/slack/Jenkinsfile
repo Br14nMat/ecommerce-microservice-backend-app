@@ -151,7 +151,7 @@ pipeline {
             slackSend(channel: "#general-ingesoftv", attachments: failureAttachment)
         }
     }
-}
+    }
 
 
 }

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    io.kompose.service: order-service
+  name: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: order-service
+  template:
+    metadata:
+      labels:
+        io.kompose.service: order-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/order-service/actuator/prometheus"
+        prometheus.io/port: "8300"
+    spec:
+      containers:
+        - name: order-service
+          image: br14nmat/order-service:latest
+          ports:
+            - containerPort: 8300
+              protocol: TCP
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: dev
+            - name: EUREKA_CLIENT_AVAILABILITYZONES_DEFAULT
+              value: myzone
+            - name: EUREKA_CLIENT_REGION
+              value: default
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://service-discovery:8761/eureka/
+            - name: EUREKA_CLIENT_SERVICEURL_MYZONE
+              value: http://service-discovery:8761/eureka
+            - name: SPRING_CONFIG_IMPORT
+              value: optional:configserver:http://cloud-config:9296/
+            - name: SPRING_ZIPKIN_BASE-URL
+              value: http://zipkin:9411
+            - name: EUREKA_INSTANCE
+              value: "order-service"
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: order-service
+            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
+              value: "false"
+      restartPolicy: Always
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    io.kompose.service: order-service
+  name: order-service
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/order-service/actuator/prometheus"
+    prometheus.io/port: "8300"
+spec:
+  ports:
+    - name: "http"
+      port: 8300
+      targetPort: 8300
+  selector:
+    io.kompose.service: order-service
