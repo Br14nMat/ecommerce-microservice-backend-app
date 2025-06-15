@@ -55,6 +55,10 @@ metadata:
   labels:
     io.kompose.service: order-service
   name: order-service
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/order-service/actuator/prometheus"
+    prometheus.io/port: "8300"
 spec:
   ports:
     - name: "http"
