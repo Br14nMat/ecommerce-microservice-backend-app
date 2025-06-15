@@ -10,9 +10,32 @@ pipeline {
         RESOURCE_GROUP = "taller2"
         AKS_NAME = "taller2brian"
         NAMESPACE = "prod"
+        TRIVY_CACHE = "C:/Users/Windows/.trivy-cache-backup"
+        SERVICES = "api-gateway favourite-service order-service payment-service product-service proxy-client shipping-service user-service"
+        REGISTRY = "br14nmat"
+        TAG = "latest"
     }
 
     stages {
+
+        stage('Solicitar Aprobación para Producción') {
+            steps {
+                script {
+                    def approvalAttachment = [[
+                        text: "🚨 Se requiere aprobación para desplegar a *producción*.\n\nPresiona 'Aprobar' en Jenkins para continuar.",
+                        fallback: "Aprobación requerida para despliegue.",
+                        color: "#ffae42"
+                    ]]
+
+                    slackSend(channel: "#general-ingesoftv", attachments: approvalAttachment)
+
+                    timeout(time: 15, unit: 'MINUTES') {
+                        input message: "¿Aprobar despliegue a producción?", ok: "Aprobar"
+                    }
+                }
+            }
+        }
+
         stage("Checkout git") {
             steps {
                 checkout scmGit(
@@ -33,6 +56,58 @@ pipeline {
 
                 dir('payment-service') {
                     sh 'mvn clean verify'
+                }
+            }
+        }
+
+        stage('Archive JaCoCo Reports') {
+            steps {
+                script {
+                    sh 'mkdir -p coverage-reports/product-service'
+                    sh 'mkdir -p coverage-reports/payment-service'
+
+                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
+                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                }
+
+                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+            }
+        }
+
+        stage('Scan with Trivy') {
+            steps {
+                script {
+                    for (service in env.SERVICES.tokenize()) {
+                        def image = "${env.REGISTRY}/${service}:${env.TAG}"
+                        def safeName = service.replaceAll("[^a-zA-Z0-9_-]", "_") // Para nombres de archivos válidos
+                        echo "Escaneando imagen ${image} con Trivy (generando reportes)"
+                        sh """
+                            mkdir -p trivy-reports
+                            mkdir -p trivy-reports/txt
+                            mkdir -p trivy-reports/json
+
+                            trivy image \
+                                --cache-dir ${env.TRIVY_CACHE} \
+                                --timeout 10m \
+                                --skip-db-update \
+                                --skip-java-db-update \
+                                --exit-code 0 \
+                                --severity CRITICAL \
+                                ${image} > trivy-reports/txt/${safeName}_report.txt
+                            
+                            trivy image \
+                                --cache-dir ${env.TRIVY_CACHE} \
+                                --timeout 10m \
+                                --skip-db-update \
+                                --skip-java-db-update \
+                                --exit-code 0 \
+                                --severity CRITICAL \
+                                --format json \
+                                --output trivy-reports/json/${safeName}_report.json \
+                                ${image}
+                
+                        """
+                    }
                 }
             }
         }
@@ -97,6 +172,17 @@ pipeline {
                 '''
             }
         }
+
+        stage('Deploy Service Monitors') {
+            steps {
+                script {
+                    sh '''
+                        kubectl apply -f k8s/monitor/ -n monitoring
+                    '''
+                }
+            }
+        }
+
 
 
         stage('Port Forward Multiple Services') {
@@ -176,6 +262,34 @@ pipeline {
             
         }
 
+        stage('DAST - OWASP ZAP Baseline Scan') {
+          steps {
+            script {
+                def gatewayHost = sh(script: "kubectl get svc api-gateway -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
+                echo "API Gateway is available at: http://${gatewayHost}:8080"
+                def zapReportsPath = "${env.WORKSPACE.replace('\\', '/')}/zap_reports"
+
+                echo "Iniciando escaneo OWASP ZAP..."
+                sh """
+                    mkdir -p "${zapReportsPath}"
+            
+                    docker pull ghcr.io/zaproxy/zaproxy:stable
+            
+                    docker run --rm \
+                      -v "${zapReportsPath}:/zap/wrk:rw" \
+                      ghcr.io/zaproxy/zaproxy:stable \
+                      zap-baseline.py \
+                        -t http://${gatewayHost}:8080 \
+                        -r zap_report.html \
+                        -x zap_report.xml \
+                        -I
+                     """
+
+            }
+            archiveArtifacts artifacts: 'zap_reports/*.html, zap_reports/*.xml', fingerprint: true
+          }
+        }
+
 
         stage('Stop Port Forwards') {
             steps {
@@ -189,53 +303,124 @@ pipeline {
             }
         }
 
-        stage('Generate Release Notes') {
-                steps {
-                    script {
-                        
-                        def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                        def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
-                        def commitLogs = sh(script: "git log -5 --pretty=format:'- %s (%an)'", returnStdout: true).trim()
-                        
-                        sh 'mkdir -p release_notes'
-                        
-                        def releaseNotes = """
-                            # Release Notes - ${version}
 
-                            **Fecha y hora:** ${date}  
-                            **Ambiente:** ${NAMESPACE}  
-
-                            ## ✅ Cambios recientes
-                            ${commitLogs}
-
-                            ## 🧪 Resultados esperados
-                            - Pruebas unitarias e integradas: ✅ OK
-                            - Pruebas E2E: ✅ OK 
-                            - Pruebas de carga Locust: ✅ OK (ver Newman report) 
-                                - Archivos: locust_output/*/locust_report.html
-
-                            ## 📎 Referencia
-                            - Build: #${env.BUILD_NUMBER}
-                            - Commit: ${version}
-                            - Branch: master
-                            """
-                        writeFile file: "release_notes/release-${version}.md", text: releaseNotes
-                        
-                    }
-                }
-        }
-
-        stage('Archive JaCoCo Reports') {
+        stage('Determine Next Semantic Version') {
             steps {
                 script {
-                    sh 'mkdir -p coverage-reports/product-service'
-                    sh 'mkdir -p coverage-reports/payment-service'
+                    // Extraer última versión tag
+                    def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
 
-                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
-                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                    // Remover prefijo 'v' si existe
+                    lastTag = lastTag.replaceFirst("^v", "")
+
+                    def major = 0, minor = 0, patch = 0
+                    def parts = lastTag.tokenize('.')
+
+                    if (parts.size() == 3 && parts.every { it.isInteger() }) {
+                        (major, minor, patch) = parts.collect { it.toInteger() }
+                    } else {
+                        echo "WARNING: El último tag '${lastTag}' no tiene formato semántico. Se usará 0.0.0 por defecto."
+                    }
+
+                    // Obtener los commits desde el último tag (usar v${lastTag} si los tags están con prefijo)
+                    def commitRange = "v${major}.${minor}.${patch}"
+                    def commits = sh(script: "git log ${commitRange}..HEAD --pretty=%s || true", returnStdout: true).trim().split("\n")
+
+                    def bump = "patch"
+                    for (msg in commits) {
+                        if (msg.startsWith("feat:")) {
+                            bump = bump == "major" ? "major" : "minor"
+                        }
+                        if (msg.startsWith("BREAKING CHANGE") || msg.contains("!:")) {
+                            bump = "major"
+                        }
+                    }
+
+                    if (bump == "major") {
+                        major++
+                        minor = 0
+                        patch = 0
+                    } else if (bump == "minor") {
+                        minor++
+                        patch = 0
+                    } else if (bump == "patch") {
+                        patch++
+                    }
+
+                    def nextVersion = "${major}.${minor}.${patch}"
+
+                    echo "Next version will be: ${nextVersion}"
+                    env.NEXT_VERSION = nextVersion
                 }
+            }
+        }
 
-                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+
+        stage('Generate Release Notes') {
+            steps {
+                script {
+                    def date = sh(script: "date '+%Y-%m-%d %H:%M:%S'", returnStdout: true).trim()
+
+                    // Usar el último tag existente como base
+                    def lastTag = sh(script: "git describe --tags --abbrev=0 || echo 0.0.0", returnStdout: true).trim()
+                    lastTag = lastTag.replaceFirst("^v", "") // por si tiene 'v'
+
+                    def commitLogs = sh(
+                        script: "git log v${lastTag}..HEAD --pretty=format:'- %s (%an)' || true",
+                        returnStdout: true
+                    ).trim()
+
+                    sh 'mkdir -p release_notes'
+
+                    def releaseNotes = """
+                        # Release Notes - v${env.NEXT_VERSION}
+
+                        **Fecha y hora:** ${date}  
+                        **Ambiente:** ${NAMESPACE}  
+
+                        ## ✅ Cambios recientes
+                        ${commitLogs}
+
+                        ## 🧪 Resultados esperados
+                        - Pruebas unitarias e integradas: ✅ OK
+                        - Pruebas E2E: ✅ OK 
+                        - Pruebas de carga Locust: ✅ OK (ver reportes HTML) 
+                            - Archivos: locust_output/*/locust_report.html
+
+                        ## 📎 Referencia
+                        - Build: #${env.BUILD_NUMBER}
+                        - Commit: ${env.GIT_COMMIT}
+                        - Versión: v${env.NEXT_VERSION}
+                        - Branch: master
+                    """
+                    writeFile file: "release_notes/release-v${env.NEXT_VERSION}.md", text: releaseNotes
+                }
+            }
+        }
+
+        stage('Tag Release in Git') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    script {
+                        sh '''
+                            git config user.email "ci-bot@example.com"
+                            git config user.name "CI Bot"
+                            git tag -a v$NEXT_VERSION -m "Release v$NEXT_VERSION"
+                            git push https://$GIT_USER:$GIT_TOKEN@github.com/Br14nMat/ecommerce-microservice-backend-app.git v$NEXT_VERSION
+
+                        '''
+
+                        createGitHubRelease(
+                            credentialId: 'github-token',
+                            repository: 'Br14nMat/ecommerce-microservice-backend-app',
+                            tag: "v${env.NEXT_VERSION}",
+                            commitish: 'master',
+                            bodyFile: "release_notes/release-v${env.NEXT_VERSION}.md",
+                            draft: false,
+                            prerelease: false
+                        )
+                    }
+                }
             }
         }
 
@@ -249,9 +434,64 @@ pipeline {
                     fallback: 'El pipeline fue exitoso.',
                     color: '#36a64f'
                 ]]
-                slackSend(channel: "#general-ingesoftv", attachments: successAttachment) 
+                def slackResponse = slackSend(channel: "#general-ingesoftv", attachments: successAttachment)
+
+                def version = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                slackUploadFile(
+                    filePath: "release_notes/release-${version}.md",
+                    channel: slackResponse.channelId,
+                    initialComment: "📝 Notas de la versión ${version}"
+                )
+
+                slackUploadFile(
+                    filePath: "coverage-reports/product-service/index.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "📊 Cobertura - Product Service"
+                )
+
+                slackUploadFile(
+                    filePath: "coverage-reports/payment-service/index.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "📊 Cobertura - Payment Service"
+                )
+
+                sh '''
+                    tar -czf trivy-reports.tar.gz trivy-reports/
+                '''
+    
+                slackUploadFile(
+                    filePath: "trivy-reports.tar.gz",
+                    channel: slackResponse.channelId,
+                    initialComment: "🛡️ Reportes Trivy (vulnerabilidades)"
+                )
+
+                slackUploadFile(
+                filePath: "locust/locust_output/product/locust_report.html",
+                channel: slackResponse.channelId,
+                initialComment: "🐜 Locust - Product Service"
+                )
+
+                slackUploadFile(
+                    filePath: "locust/locust_output/order/locust_report.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "🐜 Locust - Order Service"
+                )
+
+                slackUploadFile(
+                    filePath: "locust/locust_output/user/locust_report.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "🐜 Locust - User Service"
+                )
+
+                 slackUploadFile(
+                    filePath: "zap_reports/zap_report.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "🛡️ OWASP ZAP - Reporte HTML"
+                )
+
             }
         }
+
         failure {
             script {
                 def failureAttachment = [[

@@ -10,6 +10,10 @@ pipeline {
         RESOURCE_GROUP = "taller2"
         AKS_NAME = "taller2brian"
         NAMESPACE = "stage"
+        TRIVY_CACHE = "C:/Users/Windows/.trivy-cache-backup"
+        SERVICES = "api-gateway favourite-service order-service payment-service product-service proxy-client shipping-service user-service"
+        REGISTRY = "br14nmat"
+        TAG = "latest"
     }
 
     stages {
@@ -22,17 +26,69 @@ pipeline {
                 )
             }
         }
-
         
         stage("Run Unit and Integration Tests") {
             steps {
 
                 dir('product-service') {
-                    sh 'mvn test'
+                    sh 'mvn clean verify'
                 }
 
                 dir('payment-service') {
-                    sh 'mvn test'
+                    sh 'mvn clean verify'
+                }
+            }
+        }
+        
+        
+        stage('Archive JaCoCo Reports') {
+            steps {
+                script {
+                    sh 'mkdir -p coverage-reports/product-service'
+                    sh 'mkdir -p coverage-reports/payment-service'
+
+                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
+                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
+                }
+
+                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
+            }
+        }
+
+        stage('Scan with Trivy') {
+            steps {
+                script {
+                    for (service in env.SERVICES.tokenize()) {
+                        def image = "${env.REGISTRY}/${service}:${env.TAG}"
+                        def safeName = service.replaceAll("[^a-zA-Z0-9_-]", "_") // Para nombres de archivos válidos
+                        echo "Escaneando imagen ${image} con Trivy (generando reportes)"
+                        sh """
+                            mkdir -p trivy-reports
+                            mkdir -p trivy-reports/txt
+                            mkdir -p trivy-reports/json
+
+                            trivy image \
+                                --cache-dir ${env.TRIVY_CACHE} \
+                                --timeout 10m \
+                                --skip-db-update \
+                                --skip-java-db-update \
+                                --exit-code 0 \
+                                --severity CRITICAL \
+                                ${image} > trivy-reports/txt/${safeName}_report.txt
+                            
+                            trivy image \
+                                --cache-dir ${env.TRIVY_CACHE} \
+                                --timeout 10m \
+                                --skip-db-update \
+                                --skip-java-db-update \
+                                --exit-code 0 \
+                                --severity CRITICAL \
+                                --format json \
+                                --output trivy-reports/json/${safeName}_report.json \
+                                ${image}
+                
+                        """
+                    }
                 }
             }
         }
@@ -149,4 +205,52 @@ pipeline {
 
 
     }
+
+    post {
+    success {
+        script {
+            def successAttachment = [[
+                text: "✅ El pipeline de ${env.NAMESPACE} se ejecutó correctamente.", 
+                fallback: 'El pipeline fue exitoso.',
+                color: '#36a64f'
+            ]]
+            def slackResponse = slackSend(channel: "#general-ingesoftv", attachments: successAttachment)
+            
+            slackUploadFile(
+                filePath: "coverage-reports/product-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Product Service"
+            )
+
+            slackUploadFile(
+                filePath: "coverage-reports/payment-service/index.html",
+                channel: slackResponse.channelId,
+                initialComment: "📊 Cobertura - Payment Service"
+            )
+
+            sh '''
+                tar -czf trivy-reports.tar.gz trivy-reports/
+            '''
+
+            slackUploadFile(
+                filePath: "trivy-reports.tar.gz",
+                channel: slackResponse.channelId,
+                initialComment: "🛡️ Reportes Trivy (vulnerabilidades)"
+            )
+        }
+    }
+
+    failure {
+        script {
+            def failureAttachment = [[
+                text: "❌ El pipeline de ${env.NAMESPACE} falló. Revisa los logs para más detalles.", 
+                fallback: 'El pipeline falló.',
+                color: '#ff0000'
+            ]]
+            slackSend(channel: "#general-ingesoftv", attachments: failureAttachment)
+        }
+    }
+    }
+
+
 }

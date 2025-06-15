@@ -32,40 +32,6 @@ pipeline {
             }
         }
 
-        stage("Resumen SonarQube en Slack") {
-        steps {
-            script {
-                def projectKey = "ecommerce-microservice-backend-app"
-                def sonarHost = "http://localhost:9000"         
-                def metrics = "coverage,bugs,vulnerabilities,code_smells,sqale_rating,reliability_rating,security_rating"
-                
-                def response = sh(
-                    script: """curl -s -u $SONAR_TOKEN: "$sonarHost/api/measures/component?component=$projectKey&metricKeys=$metrics" """,
-                    returnStdout: true
-                ).trim()
-
-                def data = readJSON text: response
-                def measures = data.component.measures.collectEntries { [(it.metric): it.value] }
-
-                def attachment = [[
-                    title: "📊 SonarQube Report - ${projectKey}",
-                    color: "#4CAF50",
-                    fields: [
-                        [title: "Coverage", value: "${measures.coverage}%", short: true],
-                        [title: "Bugs", value: "${measures.bugs}", short: true],
-                        [title: "Vulnerabilities", value: "${measures.vulnerabilities}", short: true],
-                        [title: "Code Smells", value: "${measures.code_smells}", short: true],
-                        [title: "Maintainability", value: "Rating ${measures.sqale_rating}", short: true],
-                        [title: "Reliability", value: "Rating ${measures.reliability_rating}", short: true],
-                        [title: "Security", value: "Rating ${measures.security_rating}", short: true]
-                    ]
-                ]]
-
-                slackSend(channel: "#general-ingesoftv", attachments: attachment)
-            }
-        }
-        }
-
 
         stage("Run Unit and Integration Tests") {
             steps {
