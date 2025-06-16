@@ -138,17 +138,6 @@ pipeline {
         stage('Deploy remaining services') {
             steps {
                 sh '''
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service --timeout=300s
 
                 '''
             }
@@ -189,7 +178,33 @@ pipeline {
                 '''
             }
         }
+        
+        stage('DAST - OWASP ZAP Baseline Scan') {
+          steps {
+            script {
+                def gatewayHost = sh(script: "kubectl get svc api-gateway -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
+                echo "API Gateway is available at: http://${gatewayHost}:8080"
+                def zapReportsPath = "${env.WORKSPACE.replace('\\', '/')}/zap_reports"
 
+                echo "Iniciando escaneo OWASP ZAP..."
+                sh """
+                    mkdir -p "${zapReportsPath}"
+            
+                    docker pull ghcr.io/zaproxy/zaproxy:stable
+            
+                    docker run --rm \
+                      -v "${zapReportsPath}:/zap/wrk:rw" \
+                      ghcr.io/zaproxy/zaproxy:stable \
+                      zap-baseline.py \
+                        -t http://${gatewayHost}:8080 \
+                        -r zap_report.html \
+                        -x zap_report.xml \
+                        -I
+                     """
+
+            }
+          }
+        }
 
         stage('Stop Port Forwards') {
             steps {
@@ -227,8 +242,10 @@ pipeline {
                 channel: slackResponse.channelId,
                 initialComment: "📊 Cobertura - Payment Service"
             )
+            
+            
 
-            sh '''
+             sh '''
                 tar -czf trivy-reports.tar.gz trivy-reports/
             '''
 
@@ -236,6 +253,12 @@ pipeline {
                 filePath: "trivy-reports.tar.gz",
                 channel: slackResponse.channelId,
                 initialComment: "🛡️ Reportes Trivy (vulnerabilidades)"
+            )
+            
+            slackUploadFile(
+                    filePath: "zap_reports/zap_report.html",
+                    channel: slackResponse.channelId,
+                    initialComment: "🛡️ OWASP ZAP - Reporte HTML"
             )
         }
     }

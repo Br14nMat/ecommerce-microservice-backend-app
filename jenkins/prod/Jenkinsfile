@@ -46,34 +46,6 @@ pipeline {
             }
         }
 
-        
-        stage("Run Unit and Integration Tests") {
-            steps {
-
-                dir('product-service') {
-                    sh 'mvn clean verify'
-                }
-
-                dir('payment-service') {
-                    sh 'mvn clean verify'
-                }
-            }
-        }
-
-        stage('Archive JaCoCo Reports') {
-            steps {
-                script {
-                    sh 'mkdir -p coverage-reports/product-service'
-                    sh 'mkdir -p coverage-reports/payment-service'
-
-                    sh 'cp -r product-service/target/site/jacoco/* coverage-reports/product-service/'
-                    sh 'cp -r payment-service/target/site/jacoco/* coverage-reports/payment-service/'
-                }
-
-                archiveArtifacts artifacts: 'coverage-reports/**/*.html', fingerprint: true
-            }
-        }
-
         stage('Scan with Trivy') {
             steps {
                 script {
@@ -157,17 +129,7 @@ pipeline {
         stage('Deploy remaining services') {
             steps {
                 sh '''
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/product-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/payment-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=payment-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/order-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=order-service --timeout=300s
-
-                    kubectl apply -n $NAMESPACE -f k8s/$NAMESPACE/user-service-container-deployment.yaml
-                    kubectl wait -n $NAMESPACE --for=condition=ready pod -l io.kompose.service=user-service --timeout=300s
+                
 
                 '''
             }
@@ -200,7 +162,10 @@ pipeline {
                         # Port forward User Service
                         kubectl port-forward service/user-service 8700:8700 -n ${NAMESPACE} &
                         echo $! > portforward-user.pid
-
+                        
+                        kubectl port-forward service/api-gateway 8080:8080 -n ${NAMESPACE} &
+                        echo $! > portforward-gateway.pid
+                        
                         # Espera unos segundos a que todos los port forwards estén listos
                         sleep 10
                     '''
@@ -262,34 +227,6 @@ pipeline {
             
         }
 
-        stage('DAST - OWASP ZAP Baseline Scan') {
-          steps {
-            script {
-                def gatewayHost = sh(script: "kubectl get svc api-gateway -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].ip}'", returnStdout: true).trim()
-                echo "API Gateway is available at: http://${gatewayHost}:8080"
-                def zapReportsPath = "${env.WORKSPACE.replace('\\', '/')}/zap_reports"
-
-                echo "Iniciando escaneo OWASP ZAP..."
-                sh """
-                    mkdir -p "${zapReportsPath}"
-            
-                    docker pull ghcr.io/zaproxy/zaproxy:stable
-            
-                    docker run --rm \
-                      -v "${zapReportsPath}:/zap/wrk:rw" \
-                      ghcr.io/zaproxy/zaproxy:stable \
-                      zap-baseline.py \
-                        -t http://${gatewayHost}:8080 \
-                        -r zap_report.html \
-                        -x zap_report.xml \
-                        -I
-                     """
-
-            }
-            archiveArtifacts artifacts: 'zap_reports/*.html, zap_reports/*.xml', fingerprint: true
-          }
-        }
-
 
         stage('Stop Port Forwards') {
             steps {
@@ -298,6 +235,7 @@ pipeline {
                         kill $(cat portforward-product.pid) || true
                         kill $(cat portforward-order.pid) || true
                         kill $(cat portforward-user.pid) || true
+                        kill $(cat portforward-gateway.pid) || true
                     '''
                 }
             }
@@ -443,17 +381,6 @@ pipeline {
                     initialComment: "📝 Notas de la versión ${version}"
                 )
 
-                slackUploadFile(
-                    filePath: "coverage-reports/product-service/index.html",
-                    channel: slackResponse.channelId,
-                    initialComment: "📊 Cobertura - Product Service"
-                )
-
-                slackUploadFile(
-                    filePath: "coverage-reports/payment-service/index.html",
-                    channel: slackResponse.channelId,
-                    initialComment: "📊 Cobertura - Payment Service"
-                )
 
                 sh '''
                     tar -czf trivy-reports.tar.gz trivy-reports/
@@ -481,12 +408,6 @@ pipeline {
                     filePath: "locust/locust_output/user/locust_report.html",
                     channel: slackResponse.channelId,
                     initialComment: "🐜 Locust - User Service"
-                )
-
-                 slackUploadFile(
-                    filePath: "zap_reports/zap_report.html",
-                    channel: slackResponse.channelId,
-                    initialComment: "🛡️ OWASP ZAP - Reporte HTML"
                 )
 
             }

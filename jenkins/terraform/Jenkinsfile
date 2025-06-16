@@ -1,0 +1,49 @@
+pipeline {
+    agent any
+
+    tools {
+        maven "MavenTool"
+    }
+
+    environment {
+        TF_DIR = "infra-ecommerce-microservice-backend-app/enviroments"
+    }
+
+    stages {
+        stage("Checkout git") {
+            steps {
+                checkout scmGit(
+                    branches: [[name: '*/master']],
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Br14nMat/infra-ecommerce-microservice-backend-app'
+                    ]]
+                )
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir("${env.TF_DIR}") {
+                    sh 'terraform init -input=false'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir("${env.TF_DIR}") {
+                    sh 'terraform plan -input=false -out=tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir("${env.TF_DIR}") {
+                    sh 'terraform apply -input=false -auto-approve tfplan'
+                }
+            }
+        }
+    }
+}
